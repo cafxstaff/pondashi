@@ -18,6 +18,11 @@ const RG_KEY = ascii("REPLAYGAIN_TRACK_GAIN");
 const R128_KEY = ascii("R128_TRACK_GAIN");
 
 export async function readReplayGain(blob: Blob): Promise<number | null> {
+  const fromChunks = await scanRiffLikeChunks(blob);
+  if (fromChunks !== undefined) {
+    return fromChunks;
+  }
+
   const headLength = Math.min(blob.size, Math.max(HEAD_BYTES, await id3TagLength(blob)));
   const head = new Uint8Array(await blob.slice(0, headLength).arrayBuffer());
   const fromHead = scan(head);
@@ -30,6 +35,56 @@ export async function readReplayGain(blob: Blob): Promise<number | null> {
     return scan(new Uint8Array(await blob.slice(tailStart).arrayBuffer()));
   }
   return null;
+}
+
+const TAG_CHUNK_IDS = new Set(["id3 ", "ID3 ", "LIST"]);
+const MAX_CHUNKS = 512;
+
+/**
+ * WAV (RIFF/RF64) / AIFF (FORM) のチャンクをたどり、id3 / LIST チャンクの中身を走査する。
+ * WAV のタグは音声データの後ろに置かれることが多く、先頭・末尾の走査では届かないため。
+ * 戻り値: WAV/AIFF でなければ undefined、WAV/AIFF ならタグの値または null。
+ */
+async function scanRiffLikeChunks(blob: Blob): Promise<number | null | undefined> {
+  const header = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+  if (header.length < 12) {
+    return undefined;
+  }
+  const magic = text(header, 0, 4);
+  const form = text(header, 8, 4);
+  const isRiff = (magic === "RIFF" || magic === "RF64") && form === "WAVE";
+  const isAiff = magic === "FORM" && (form === "AIFF" || form === "AIFC");
+  if (!isRiff && !isAiff) {
+    return undefined;
+  }
+
+  let offset = 12;
+  for (let count = 0; count < MAX_CHUNKS && offset + 8 <= blob.size; count++) {
+    const chunkHeader = new Uint8Array(await blob.slice(offset, offset + 8).arrayBuffer());
+    const id = text(chunkHeader, 0, 4);
+    const view = new DataView(chunkHeader.buffer);
+    let size = isRiff ? view.getUint32(4, true) : view.getUint32(4, false);
+    if (size === 0xffffffff) {
+      // RF64 の data チャンクはサイズが ds64 側にある。ここでは残り全部として打ち切る
+      size = blob.size - offset - 8;
+    }
+
+    if (TAG_CHUNK_IDS.has(id)) {
+      const body = new Uint8Array(
+        await blob.slice(offset + 8, Math.min(blob.size, offset + 8 + size)).arrayBuffer(),
+      );
+      const value = scan(body);
+      if (value !== null) {
+        return value;
+      }
+    }
+    offset += 8 + size + (size & 1);
+  }
+  return null;
+}
+
+function text(bytes: Uint8Array, start: number, length: number) {
+  return String.fromCharCode(...bytes.subarray(start, start + length));
 }
 
 /** 先頭に ID3v2 タグがあれば、その全長 (カバー画像が大きくても TXXX を取りこぼさないため) */

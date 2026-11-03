@@ -94,6 +94,18 @@ export function App() {
     });
   }, [settings.outputDeviceId]);
 
+  // ---- タブを閉じる / リロードの誤操作防止 ----
+
+  useEffect(() => {
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      // 古いブラウザ向け。文言はブラウザ既定のものが表示される
+      event.returnValue = "";
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
   // ---- キーボード ----
 
   useEffect(() => {
