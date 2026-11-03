@@ -1,12 +1,15 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 
-import { CATEGORY_DEFAULTS, GRID_COLUMNS } from "../types";
+import { CATEGORY_DEFAULTS, effectiveGainDb, GRID_COLUMNS } from "../types";
 import type { Category, Pad } from "../types";
 import { formatDb, formatTime } from "../format";
 import { CategoryToggle, Modal } from "./Modal";
 
-export type ReplacedFile = Pick<Pad, "fileId" | "fileName" | "durationSec">;
+export type ReplacedFile = Pick<
+  Pad,
+  "fileId" | "fileName" | "durationSec" | "replayGainDb" | "useReplayGain"
+>;
 
 type PadDetailModalProps = {
   pad: Pad;
@@ -48,9 +51,13 @@ export function PadDetailModal({
     });
   }
 
+  function handleGainChange(patch: Partial<Pick<Pad, "volumeDb" | "useReplayGain">>) {
+    update(patch);
+    onLiveVolume(draft.id, effectiveGainDb({ ...draft, ...patch }));
+  }
+
   function handleVolume(db: number) {
-    update({ volumeDb: db });
-    onLiveVolume(draft.id, db);
+    handleGainChange({ volumeDb: db });
   }
 
   async function handleReplace(list: FileList | null) {
@@ -61,7 +68,9 @@ export function PadDetailModal({
     setIsReplacing(true);
     setError(null);
     try {
-      update(await onReplaceFile(file));
+      const replaced = await onReplaceFile(file);
+      update(replaced);
+      onLiveVolume(draft.id, effectiveGainDb({ ...draft, ...replaced }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -70,7 +79,7 @@ export function PadDetailModal({
   }
 
   function handleCancel() {
-    onLiveVolume(pad.id, pad.volumeDb);
+    onLiveVolume(pad.id, effectiveGainDb(pad));
     onCancel();
   }
 
@@ -153,6 +162,27 @@ export function PadDetailModal({
               0 dB
             </button>
           </div>
+        </div>
+
+        <div className="field">
+          <span>ReplayGain (トラック)</span>
+          {draft.replayGainDb != null ? (
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={draft.useReplayGain !== false}
+                onChange={(event) => handleGainChange({ useReplayGain: event.target.checked })}
+              />
+              <span>
+                適用する <output className="value-tag">{formatDb(draft.replayGainDb)}</output>
+              </span>
+            </label>
+          ) : (
+            <small>
+              {draft.replayGainDb === undefined ? "解析中..." : "このファイルには ReplayGain タグがありません"}
+            </small>
+          )}
+          <small>実効ゲイン: {formatDb(effectiveGainDb(draft))}</small>
         </div>
 
         <div className="field-grid">

@@ -8,6 +8,7 @@ import { PadDetailModal } from "./components/PadDetailModal";
 import { overlaps, PadGrid } from "./components/PadGrid";
 import { SettingsModal } from "./components/SettingsModal";
 import { formatDb, formatTime, stripExtension } from "./format";
+import { readReplayGain } from "./replayGain";
 import {
   deleteUnusedFiles,
   getFile,
@@ -56,6 +57,24 @@ export function App() {
       if (pad.category === "se") {
         void engine.decode(pad.fileId).catch(() => undefined);
       }
+    }
+    // ReplayGain 対応前に追加されたボタンのタグを後から読む
+    for (const pad of initial) {
+      if (pad.replayGainDb !== undefined) {
+        continue;
+      }
+      void getFile(pad.fileId)
+        .then((blob) => (blob ? readReplayGain(blob) : null))
+        .catch(() => null)
+        .then((replayGainDb) =>
+          setPads((current) =>
+            current.map((item) =>
+              item.id === pad.id && item.fileId === pad.fileId
+                ? { ...item, replayGainDb, useReplayGain: item.useReplayGain ?? true }
+                : item,
+            ),
+          ),
+        );
     }
   }, []);
 
@@ -108,8 +127,15 @@ export function App() {
     } catch {
       throw new Error(`「${file.name}」は再生できない形式です`);
     }
+    const replayGainDb = await readReplayGain(file).catch(() => null);
     await putFile(fileId, file);
-    return { fileId, fileName: file.name, durationSec: buffer.duration };
+    return {
+      fileId,
+      fileName: file.name,
+      durationSec: buffer.duration,
+      replayGainDb,
+      useReplayGain: true,
+    };
   }
 
   async function handleAdd(request: AddPadRequest) {

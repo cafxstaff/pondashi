@@ -1,3 +1,4 @@
+import { effectiveGainDb } from "./types";
 import type { Category, Pad } from "./types";
 
 /** SE を止めるときのごく短いフェード (プチノイズ防止) */
@@ -136,6 +137,7 @@ export class AudioEngine {
     }
   }
 
+  /** db は ReplayGain 込みの実効ゲイン */
   setPadVolume(padId: string, db: number) {
     if (!this.ctx) {
       return;
@@ -268,7 +270,7 @@ export class AudioEngine {
     source.loop = pad.loop;
     const fadeGain = ctx.createGain();
     const volumeGain = ctx.createGain();
-    volumeGain.gain.value = dbToGain(pad.volumeDb);
+    volumeGain.gain.value = dbToGain(effectiveGainDb(pad));
     source.connect(fadeGain).connect(volumeGain).connect(this.master!);
 
     const voice: Voice = {

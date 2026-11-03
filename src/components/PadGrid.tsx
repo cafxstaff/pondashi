@@ -213,6 +213,11 @@ export function PadGrid({
             <div className="pad__meta">
               <span className="pad__category">{CATEGORY_LABEL[pad.category]}</span>
               {pad.loop ? <span className="pad__badge">LOOP</span> : null}
+              {pad.replayGainDb != null && pad.useReplayGain !== false ? (
+                <span className="pad__badge" title={`ReplayGain ${formatDb(pad.replayGainDb)}`}>
+                  RG
+                </span>
+              ) : null}
               {pad.volumeDb !== 0 ? (
                 <span className="pad__badge">{formatDb(pad.volumeDb)}</span>
               ) : null}

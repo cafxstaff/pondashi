@@ -10,6 +10,10 @@ export type Pad = {
   loop: boolean;
   /** ボタン個別の音量 (dB) */
   volumeDb: number;
+  /** ファイルのタグから読んだ ReplayGain トラックゲイン (dB)。null = タグなし、undefined = 未解析 */
+  replayGainDb?: number | null;
+  /** ReplayGain を音量に加算するか */
+  useReplayGain?: boolean;
   /** 再生開始前の空白 (秒) */
   leadInSec: number;
   x: number;
@@ -17,6 +21,12 @@ export type Pad = {
   w: number;
   h: number;
 };
+
+/** 実際に掛けるゲイン = ボタン音量 + (有効なら) ReplayGain */
+export function effectiveGainDb(pad: Pick<Pad, "volumeDb" | "replayGainDb" | "useReplayGain">) {
+  const replayGain = pad.useReplayGain !== false && pad.replayGainDb != null ? pad.replayGainDb : 0;
+  return pad.volumeDb + replayGain;
+}
 
 export type AppSettings = {
   /** "" はシステム既定の出力 */
